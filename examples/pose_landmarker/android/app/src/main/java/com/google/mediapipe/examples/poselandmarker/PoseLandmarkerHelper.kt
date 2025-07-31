@@ -36,7 +36,7 @@ class PoseLandmarkerHelper(
     var minPoseDetectionConfidence: Float = DEFAULT_POSE_DETECTION_CONFIDENCE,
     var minPoseTrackingConfidence: Float = DEFAULT_POSE_TRACKING_CONFIDENCE,
     var minPosePresenceConfidence: Float = DEFAULT_POSE_PRESENCE_CONFIDENCE,
-    var currentModel: Int = MODEL_POSE_LANDMARKER_FULL,
+    var currentModel: Int = MODEL_POSE_LANDMARKER_LITE,
     var currentDelegate: Int = DELEGATE_CPU,
     var runningMode: RunningMode = RunningMode.IMAGE,
     val context: Context,
@@ -247,6 +247,7 @@ class PoseLandmarkerHelper(
         // Next, we'll get one frame every frameInterval ms, then run detection on these frames.
         val resultList = mutableListOf<PoseLandmarkerResult>()
         val numberOfFrameToRead = videoLengthMs.div(inferenceIntervalMs)
+        Log.v("tuancoltech2", "detectVideoFile numberOfFrameToRead: $numberOfFrameToRead")
 
         for (i in 0..numberOfFrameToRead) {
             val timestampMs = i * inferenceIntervalMs // ms
@@ -265,9 +266,11 @@ class PoseLandmarkerHelper(
                     // Convert the input Bitmap object to an MPImage object to run inference
                     val mpImage = BitmapImageBuilder(argb8888Frame).build()
 
+                    val ts = SystemClock.elapsedRealtime()
                     // Run pose landmarker using MediaPipe Pose Landmarker API
                     poseLandmarker?.detectForVideo(mpImage, timestampMs)
                         ?.let { detectionResult ->
+                            Log.i("tuancoltech", "detectForVideo in ${SystemClock.elapsedRealtime() - ts} ms detectionResult: ${detectionResult.landmarks().size} uri: $videoUri")
                             resultList.add(detectionResult)
                         } ?: {
                         didErrorOccurred = true
@@ -290,6 +293,8 @@ class PoseLandmarkerHelper(
 
         val inferenceTimePerFrameMs =
             (SystemClock.uptimeMillis() - startTime).div(numberOfFrameToRead)
+
+        Log.i("tuancoltech2", "inferenceTimePerFrameMs: $inferenceTimePerFrameMs ms. resultList.size: ${resultList.size}. didErrorOccurred: $didErrorOccurred")
 
         return if (didErrorOccurred) {
             null
@@ -342,6 +347,8 @@ class PoseLandmarkerHelper(
     ) {
         val finishTimeMs = SystemClock.uptimeMillis()
         val inferenceTime = finishTimeMs - result.timestampMs()
+
+        Log.d("tuancoltech2", "inferenceTime livestream: $inferenceTime ms")
 
         poseLandmarkerHelperListener?.onResults(
             ResultBundle(

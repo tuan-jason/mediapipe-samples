@@ -17,7 +17,8 @@
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
@@ -35,7 +36,8 @@
         <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:layout_marginBottom="@dimen/bottom_sheet_peek_height">
+            android:layout_marginBottom="@dimen/bottom_sheet_peek_height"
+            android:id="@+id/layout_main_content">
 
             <ImageView
                 android:id="@+id/imageResult"
@@ -49,6 +51,8 @@
                 android:id="@+id/videoView"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                tools:visibility="visible"
+                android:layout_marginTop="10dp"
                 android:visibility="gone" />
 
             <com.google.mediapipe.examples.poselandmarker.OverlayView
@@ -68,6 +72,34 @@
                 android:visibility="gone" />
 
         </RelativeLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:layout_constraintStart_toStartOf="@+id/layout_main_content"
+            app:layout_constraintTop_toTopOf="@+id/layout_main_content"
+            android:layout_marginStart="20dp"
+            android:layout_marginTop="20dp"
+            tools:text="This is a test text"
+            android:textColor="@color/mp_color_primary_variant"
+            android:visibility="gone"
+            tools:visibility="visible"
+            android:textSize="20dp"
+            android:id="@+id/tv_pushup_output"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:layout_constraintStart_toStartOf="@+id/layout_main_content"
+            app:layout_constraintTop_toBottomOf="@+id/tv_pushup_output"
+            android:layout_marginStart="20dp"
+            android:layout_marginTop="20dp"
+            tools:text="This is a test text"
+            android:textColor="@color/mp_color_primary_variant"
+            android:visibility="gone"
+            tools:visibility="visible"
+            android:textSize="20dp"
+            android:id="@+id/tv_plank_output"/>
 
         <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/fabGetContent"

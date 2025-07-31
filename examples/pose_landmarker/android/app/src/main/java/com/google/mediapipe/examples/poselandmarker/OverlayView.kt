@@ -22,6 +22,7 @@ import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.View
 import androidx.core.content.ContextCompat
+import com.google.mediapipe.tasks.components.containers.Connection
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarker
 import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarkerResult
@@ -34,6 +35,17 @@ class OverlayView(context: Context?, attrs: AttributeSet?) :
     private var results: PoseLandmarkerResult? = null
     private var pointPaint = Paint()
     private var linePaint = Paint()
+    private val leftShoulderHipLinePaint by lazy {
+        Paint(linePaint).apply {
+            color = ContextCompat.getColor(context!!, R.color.mp_color_error)
+        }
+    }
+
+    private val leftHipAnkleLinePaint by lazy {
+        Paint(linePaint).apply {
+            color = ContextCompat.getColor(context!!, R.color.mp_color_green)
+        }
+    }
 
     private var scaleFactor: Float = 1f
     private var imageWidth: Int = 1
@@ -74,14 +86,32 @@ class OverlayView(context: Context?, attrs: AttributeSet?) :
                     )
                 }
 
-                PoseLandmarker.POSE_LANDMARKS.forEach {
+                PoseLandmarker.POSE_LANDMARKS.toMutableSet().apply {
+                    add(Connection.create(23, 27))
+                }.forEach {
+
+                    // Left shoulder <-> left hip
+                    val paint = if (it.start() == 11 && it.end() == 23) {
+                        leftShoulderHipLinePaint
+
+                    // Left hip <-> Left ankle
+                    } else if (it.start() == 23 && it.end() == 27) {
+                        leftHipAnkleLinePaint
+                    } else linePaint
                     canvas.drawLine(
                         poseLandmarkerResult.landmarks().get(0).get(it!!.start()).x() * imageWidth * scaleFactor,
                         poseLandmarkerResult.landmarks().get(0).get(it.start()).y() * imageHeight * scaleFactor,
                         poseLandmarkerResult.landmarks().get(0).get(it.end()).x() * imageWidth * scaleFactor,
                         poseLandmarkerResult.landmarks().get(0).get(it.end()).y() * imageHeight * scaleFactor,
-                        linePaint)
+                        paint)
                 }
+            }
+
+            if (poseLandmarkerResult.landmarks().isNotEmpty()) {
+//                val leftShoulder = poseLandmarkerResult.landmarks().get(0).getOrNull(11) ?: return
+//                val leftElbow = poseLandmarkerResult.landmarks().get(0).getOrNull(13) ?: return
+//                Log.d("tuancoltech", "left shoulder is at: ${leftShoulder.x()} ${leftShoulder.y()} ${leftShoulder.z()}")
+//                Log.i("tuancoltech", "left elbow is at: ${leftElbow.x()} ${leftElbow.y()} ${leftElbow.z()}")
             }
         }
     }

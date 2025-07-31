@@ -29,16 +29,26 @@ import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.lifecycleScope
 import com.google.mediapipe.examples.poselandmarker.MainViewModel
+import com.google.mediapipe.examples.poselandmarker.Measurement
+import com.google.mediapipe.examples.poselandmarker.PlankDetector
 import com.google.mediapipe.examples.poselandmarker.PoseLandmarkerHelper
+import com.google.mediapipe.examples.poselandmarker.PushUpDetector
+import com.google.mediapipe.examples.poselandmarker.R
 import com.google.mediapipe.examples.poselandmarker.databinding.FragmentGalleryBinding
 import com.google.mediapipe.tasks.vision.core.RunningMode
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.util.*
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
+import kotlin.math.abs
 
 class GalleryFragment : Fragment(), PoseLandmarkerHelper.LandmarkerListener {
 
@@ -57,10 +67,14 @@ class GalleryFragment : Fragment(), PoseLandmarkerHelper.LandmarkerListener {
     /** Blocking ML operations are performed using this executor */
     private lateinit var backgroundExecutor: ScheduledExecutorService
 
+    private var currentMediaUri: Uri? = null
+
     private val getContent =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
             // Handle the returned Uri
             uri?.let { mediaUri ->
+                currentMediaUri = mediaUri
+                Log.v("tuancoltech", "getContent uri: $mediaUri")
                 when (val mediaType = loadMediaType(mediaUri)) {
                     MediaType.IMAGE -> runDetectionOnImage(mediaUri)
                     MediaType.VIDEO -> runDetectionOnVideo(mediaUri)
@@ -303,19 +317,24 @@ class GalleryFragment : Fragment(), PoseLandmarkerHelper.LandmarkerListener {
     }
 
     private fun runDetectionOnVideo(uri: Uri) {
+        Log.i("tuancoltech", "runDetectionOnVideo: $uri")
         setUiEnabled(false)
         updateDisplayView(MediaType.VIDEO)
 
         with(fragmentGalleryBinding.videoView) {
             setVideoURI(uri)
             // mute the audio
-            setOnPreparedListener { it.setVolume(0f, 0f) }
+            setOnPreparedListener {
+//                it.isLooping = true
+                it.setVolume(0f, 0f)
+            }
             requestFocus()
         }
 
+        analyzePoseJob?.cancel(true)
+        detectOnVideoJob?.cancel(true)
         backgroundExecutor = Executors.newSingleThreadScheduledExecutor()
-        backgroundExecutor.execute {
-
+        detectOnVideoJob = backgroundExecutor.schedule({
             poseLandmarkerHelper =
                 PoseLandmarkerHelper(
                     context = requireContext(),
@@ -338,8 +357,61 @@ class GalleryFragment : Fragment(), PoseLandmarkerHelper.LandmarkerListener {
                 ?: run { Log.e(TAG, "Error running pose landmarker.") }
 
             poseLandmarkerHelper.clearPoseLandmarker()
+        }, 0, TimeUnit.MILLISECONDS)
+//        backgroundExecutor.execute {
+//
+//            poseLandmarkerHelper =
+//                PoseLandmarkerHelper(
+//                    context = requireContext(),
+//                    runningMode = RunningMode.VIDEO,
+//                    minPoseDetectionConfidence = viewModel.currentMinPoseDetectionConfidence,
+//                    minPoseTrackingConfidence = viewModel.currentMinPoseTrackingConfidence,
+//                    minPosePresenceConfidence = viewModel.currentMinPosePresenceConfidence,
+//                    currentDelegate = viewModel.currentDelegate
+//                )
+//
+//            activity?.runOnUiThread {
+//                fragmentGalleryBinding.videoView.visibility = View.GONE
+//                fragmentGalleryBinding.progress.visibility = View.VISIBLE
+//            }
+//
+//            poseLandmarkerHelper.detectVideoFile(uri, VIDEO_INTERVAL_MS)
+//                ?.let { resultBundle ->
+//                    activity?.runOnUiThread { displayVideoResult(resultBundle) }
+//                }
+//                ?: run { Log.e(TAG, "Error running pose landmarker.") }
+//
+//            poseLandmarkerHelper.clearPoseLandmarker()
+//        }
+
+        fragmentGalleryBinding.videoView.setOnCompletionListener {
+            Log.i("tuancoltech", "Video playback completed. Looping...")
+
+            poseLandmarkerHelper.setupPoseLandmarker()
+//            fragmentGalleryBinding.videoView.start()
+//            poseLandmarkerHelper.detectVideoFile(uri, VIDEO_INTERVAL_MS)
+//                ?.let { resultBundle ->
+//                    activity?.runOnUiThread { displayVideoResult(resultBundle) }
+//                }
+//                ?: run { Log.e(TAG, "Error running pose landmarker.") }
+//            runDetectionOnVideo(uri)
+            analyzePoseJob?.cancel(true)
+            detectOnVideoJob?.cancel(true)
+            if (backgroundExecutor.isShutdown) {
+                backgroundExecutor = Executors.newSingleThreadScheduledExecutor()
+            }
+            backgroundExecutor.execute {
+                poseLandmarkerHelper.detectVideoFile(uri, VIDEO_INTERVAL_MS)
+                    ?.let { resultBundle ->
+                        activity?.runOnUiThread { displayVideoResult(resultBundle) }
+                    }
+                    ?: run { Log.e(TAG, "Error running pose landmarker.") }
+            }
         }
     }
+
+    private var analyzePoseJob: ScheduledFuture<*>? = null
+    private var detectOnVideoJob: ScheduledFuture<*>? = null
 
     // Setup and display the video.
     private fun displayVideoResult(result: PoseLandmarkerHelper.ResultBundle) {
@@ -350,7 +422,45 @@ class GalleryFragment : Fragment(), PoseLandmarkerHelper.LandmarkerListener {
         fragmentGalleryBinding.videoView.start()
         val videoStartTimeMs = SystemClock.uptimeMillis()
 
-        backgroundExecutor.scheduleAtFixedRate(
+        Log.d("tuancoltech", "displayVideoResult result.size: ${result.results.size} ")
+
+        if (backgroundExecutor.isShutdown) {
+            backgroundExecutor = Executors.newSingleThreadScheduledExecutor()
+        }
+
+        var pushUpCount = 0
+        var lastSampleTs = SystemClock.elapsedRealtime()
+
+        val pushUpDetector = PushUpDetector { count ->
+//                            if (isPushUp) {
+//                                Log.d("tuancoltech2", "Detected push-up pose!")
+//                            }
+            Log.d("tuancoltech2", "Detected push-up rep. count: $count")
+
+            activity?.runOnUiThread {
+                if (count > 0) {
+                    fragmentGalleryBinding.tvPushupOutput.visibility = View.VISIBLE
+                    fragmentGalleryBinding.tvPushupOutput.text = "Push-up count: $count"
+                }
+            }
+        }
+
+        val plankDetector = PlankDetector { durationSeconds ->
+            Log.d("tuancoltech2", "Detected plank. duration: $durationSeconds seconds")
+            activity?.runOnUiThread {
+
+                if (durationSeconds > 0) {
+                    fragmentGalleryBinding.tvPlankOutput.visibility = View.VISIBLE
+                    fragmentGalleryBinding.tvPlankOutput.text = "Plank duration: $durationSeconds seconds"
+                    fragmentGalleryBinding.tvPlankOutput.setTextColor(ContextCompat.getColor(requireActivity(), R.color.mp_color_primary_variant))
+                } else {
+                    fragmentGalleryBinding.tvPlankOutput.text = "Invalid plank position!"
+                    fragmentGalleryBinding.tvPlankOutput.setTextColor(ContextCompat.getColor(requireActivity(), R.color.mp_color_error))
+                }
+            }
+        }
+
+        analyzePoseJob = backgroundExecutor.scheduleWithFixedDelay(
             {
                 activity?.runOnUiThread {
                     val videoElapsedTimeMs =
@@ -360,14 +470,78 @@ class GalleryFragment : Fragment(), PoseLandmarkerHelper.LandmarkerListener {
 
                     if (resultIndex >= result.results.size || fragmentGalleryBinding.videoView.visibility == View.GONE) {
                         // The video playback has finished so we stop drawing bounding boxes
+                        Log.w("tuancoltech", "shutting down backgroundExecutor as resultIndex: $resultIndex results.size: ${result.results.size} videoView.isGone: ${fragmentGalleryBinding.videoView.visibility == View.GONE}")
                         backgroundExecutor.shutdown()
                     } else {
+                        Log.v("tuancoltech", "setResults on index: $resultIndex Size: ${result.results.size} Should be drawing")
                         fragmentGalleryBinding.overlay.setResults(
                             result.results[resultIndex],
                             result.inputImageHeight,
                             result.inputImageWidth,
                             RunningMode.VIDEO
                         )
+
+                        lifecycleScope.launch(Dispatchers.Default) {
+
+                            // Push-up detector: This is current assuming that left side is more visible
+                            // than right side of the body. Adjust the algorithm if needed by comparing
+                            // visibility of a [NormalizedLandmark]'s between left and right side to
+                            // decide which side is better
+
+                            val leftShoulder = result.results[resultIndex].landmarks().get(0).get(11)
+                            val leftHip = result.results[resultIndex].landmarks().get(0).get(23)
+                            val leftAnkle = result.results[resultIndex].landmarks().get(0).get(27)
+                            val leftElbow = result.results[resultIndex].landmarks().get(0).get(13)
+                            val leftWrist = result.results[resultIndex].landmarks().get(0).get(15)
+                            val leftEar = result.results[resultIndex].landmarks().get(0).get(7)
+
+                            // Should be close to 0° or 180°
+                            val shoulderHipAnkleAngle = Measurement.angleOneCommonPoint(leftShoulder, leftHip, leftAnkle)
+
+                            // Should be close to 0°
+                            val shoulderAnkleAngleWithHorizontal = Measurement.angleWithHorizontal(leftShoulder, leftAnkle)
+
+                            // Should be close to 90°
+                            val elbowWristAngleWithHorizontal = Measurement.angleWithHorizontal(leftElbow, leftWrist)
+
+                            // When angle between left ear and left ankle is near 0°, then it's a
+                            // repetition of push-up.
+                            val leftEarAnkleAngleWithHorizontal = Measurement.angleWithHorizontal(leftEar, leftAnkle)
+
+                            val shoulderElbowVersusWristAngle = Measurement.angleOneCommonPoint(leftShoulder, leftElbow, leftWrist)
+
+                            Log.w("tuancoltech", "\nshoulderHipAnkleAngle: $shoulderHipAnkleAngle. " +
+                                    "shoulderAnkleAngleWithHorizontal: $shoulderAnkleAngleWithHorizontal. " +
+                                    "elbowWristAngleWithHorizontal: $elbowWristAngleWithHorizontal")
+
+                            /*val isPushUp = */pushUpDetector.evaluatePoseFrame(
+                                abs(shoulderHipAnkleAngle),
+                                abs(shoulderAnkleAngleWithHorizontal),
+                                abs(elbowWristAngleWithHorizontal),
+                                abs(shoulderElbowVersusWristAngle)
+                            )
+
+                            plankDetector.evaluatePoseFrame(
+                                abs(shoulderHipAnkleAngle),
+                                abs(shoulderAnkleAngleWithHorizontal),
+                                abs(elbowWristAngleWithHorizontal),
+                                abs(shoulderElbowVersusWristAngle))
+
+//                            withContext(Dispatchers.Main) {
+//                                val sampleWindowMs = SystemClock.elapsedRealtime() - lastSampleTs
+//                                if (isPushUp.first && isPushUp.second && sampleWindowMs > 1000L) {
+//                                    pushUpCount ++
+//                                    fragmentGalleryBinding.tvOutput.visibility = View.VISIBLE
+//                                    fragmentGalleryBinding.tvOutput.text = "Push-up count: $pushUpCount"
+//                                    Log.w("tuancoltech2", "\nshoulderHipAnkleAngle: $shoulderHipAnkleAngle. " +
+//                                            "shoulderAnkleAngleWithHorizontal: $shoulderAnkleAngleWithHorizontal. " +
+//                                            "elbowWristAngleWithHorizontal: $elbowWristAngleWithHorizontal. " +
+//                                            "shoulderElbowVersusWristAngle: $shoulderElbowVersusWristAngle")
+//                                    lastSampleTs = SystemClock.elapsedRealtime()
+//                                }
+//                                Log.v("tuancoltech2", "isPushUp: ${isPushUp.first} pushUpCount: $pushUpCount resultIdx: $resultIndex shoulderElbowVersusWristAngle: $shoulderElbowVersusWristAngle")
+//                            }
+                        }
 
                         setUiEnabled(true)
 
@@ -430,6 +604,7 @@ class GalleryFragment : Fragment(), PoseLandmarkerHelper.LandmarkerListener {
 
     override fun onError(error: String, errorCode: Int) {
         classifyingError()
+        Log.e("tuancoltech", "onError: $error errorCode: $errorCode")
         activity?.runOnUiThread {
             Toast.makeText(requireContext(), error, Toast.LENGTH_SHORT).show()
             if (errorCode == PoseLandmarkerHelper.GPU_ERROR) {
@@ -443,12 +618,13 @@ class GalleryFragment : Fragment(), PoseLandmarkerHelper.LandmarkerListener {
 
     override fun onResults(resultBundle: PoseLandmarkerHelper.ResultBundle) {
         // no-op
+        Log.d("tuancoltech", "onResults size: ${resultBundle.results.size}")
     }
 
     companion object {
         private const val TAG = "GalleryFragment"
 
         // Value used to get frames at specific intervals for inference (e.g. every 300ms)
-        private const val VIDEO_INTERVAL_MS = 300L
+        private const val VIDEO_INTERVAL_MS = 150L
     }
 }
