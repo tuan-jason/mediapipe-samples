@@ -29,7 +29,7 @@ class MeasurementTest {
         val p2 = createPoint(1f, 0f)
         val p3 = createPoint(2f, 0f)
         val result = angleOneCommonPoint(p1, p2, p3)
-        assertEquals(0.0, result, 0.0001)
+        assertEquals(0.0f, result, 0.0001f)
     }
 
     @Test
@@ -38,7 +38,7 @@ class MeasurementTest {
         val p2 = createPoint(1f, 0f)
         val p3 = createPoint(1f, 1f)
         val result = angleOneCommonPoint(p1, p2, p3)
-        assertEquals(90.0, result, 0.0001)
+        assertEquals(90.0f, result, 0.0001f)
     }
 
     @Test
@@ -47,7 +47,7 @@ class MeasurementTest {
         val p2 = createPoint(1f, 1f)
         val p3 = createPoint(2f, 0f)
         val result = angleOneCommonPoint(p1, p2, p3)
-        assertEquals(90.0, result, 1.0) // approximate
+        assertEquals(90.0f, result, 1.0f) // approximate
     }
 
     @Test
@@ -56,7 +56,7 @@ class MeasurementTest {
         val p2 = createPoint(0f, 0f)
         val p3 = createPoint(0f, 0f)
         val result = angleOneCommonPoint(p1, p2, p3)
-        assertEquals(0.0, result, 0.0001)
+        assertEquals(0.0f, result, 0.0001f)
     }
 
     @Test
@@ -65,7 +65,7 @@ class MeasurementTest {
         val p2 = createPoint(1f, 1f)
         val p3 = createPoint(2f, 2f)
         val result = angleOneCommonPoint(p1, p2, p3)
-        assertEquals(0.0, result, 0.0001)
+        assertEquals(0.0f, result, 0.0001f)
     }
 
     @Test
@@ -158,35 +158,35 @@ class MeasurementTest {
     fun testHorizontalDistance() {
         val p1 = NormalizedLandmark.create(0f, 0f, 0f)
         val p2 = NormalizedLandmark.create(3f, 0f, 0f)
-        assertEquals(3.0, distance(p1, p2), 1e-6)
+        assertEquals(3.0f, distance(p1, p2), 1e-6f)
     }
 
     @Test
     fun testVerticalDistance() {
         val p1 = NormalizedLandmark.create(0f, 0f, 0f)
         val p2 = NormalizedLandmark.create(0f, 4f, 0f)
-        assertEquals(4.0, distance(p1, p2), 1e-6)
+        assertEquals(4.0f, distance(p1, p2), 1e-6f)
     }
 
     @Test
     fun testDiagonalDistance() {
         val p1 = NormalizedLandmark.create(0f, 0f, 0f)
         val p2 = NormalizedLandmark.create(3f, 4f, 0f)
-        assertEquals(5.0, distance(p1, p2), 1e-6) // classic 3-4-5 triangle
+        assertEquals(5.0f, distance(p1, p2), 1e-6f) // classic 3-4-5 triangle
     }
 
     @Test
     fun testSamePoint() {
         val p1 = NormalizedLandmark.create(2.5f, -1.2f, 0f)
         val p2 = NormalizedLandmark.create(2.5f, -1.2f, 0f)
-        assertEquals(0.0, distance(p1, p2), 1e-6)
+        assertEquals(0.0f, distance(p1, p2), 1e-6f)
     }
 
     @Test
     fun testNegativeCoordinates() {
         val p1 = NormalizedLandmark.create(-1f, -1f, 0f)
         val p2 = NormalizedLandmark.create(1f, 1f, 0f)
-        assertEquals(sqrt(8.0), distance(p1, p2), 1e-6)
+        assertEquals(sqrt(8.0).toFloat(), distance(p1, p2), 1e-6f)
     }
 
     /**
